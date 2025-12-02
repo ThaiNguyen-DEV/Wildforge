@@ -8,12 +8,15 @@ public class mainMenu : MonoBehaviour
     private GameObject panel_Tutorial; // Assign your tutorial panel in the Inspector
     [SerializeField]
     private GameObject panel_Shop; // Assign your shop panel in the Inspector
+    [SerializeField]
+    private GameObject panel_Settings; // Assign your new settings panel here
 
     private void Start()
     {
-        // Ensure panels are hidden when the scene starts
+        // Ensure all panels are hidden when the scene starts
         if (panel_Tutorial != null) panel_Tutorial.SetActive(false);
         if (panel_Shop != null) panel_Shop.SetActive(false);
+        if (panel_Settings != null) panel_Settings.SetActive(false);
     }
 
     /// <summary>
@@ -21,13 +24,12 @@ public class mainMenu : MonoBehaviour
     /// </summary>
     public void PlayGame()
     {
-        // Make sure "GameScene" is the exact name of your game scene file.
+        // Make sure "gameScene" is the exact name of your game scene file.
         SceneManager.LoadScene("gameScene");
     }
 
     /// <summary>
     /// Toggles the visibility of the tutorial panel.
-    /// Intended for the main "Tutorial" button.
     /// </summary>
     public void ToggleTutorialPanel()
     {
@@ -39,7 +41,6 @@ public class mainMenu : MonoBehaviour
 
     /// <summary>
     /// Explicitly closes the tutorial panel.
-    /// Intended for the "Close" button inside the tutorial panel.
     /// </summary>
     public void CloseTutorialPanel()
     {
@@ -51,13 +52,34 @@ public class mainMenu : MonoBehaviour
 
     /// <summary>
     /// Toggles the visibility of the shop panel.
-    /// Intended for the main "Shop" button.
     /// </summary>
     public void ToggleShopPanel()
     {
         if (panel_Shop != null)
         {
             panel_Shop.SetActive(!panel_Shop.activeSelf);
+        }
+    }
+
+    /// <summary>
+    /// Toggles the visibility of the settings panel.
+    /// </summary>
+    public void ToggleSettingsPanel()
+    {
+        if (panel_Settings != null)
+        {
+            panel_Settings.SetActive(!panel_Settings.activeSelf);
+        }
+    }
+
+    /// <summary>
+    /// Explicitly closes the settings panel.
+    /// </summary>
+    public void CloseSettingsPanel()
+    {
+        if (panel_Settings != null)
+        {
+            panel_Settings.SetActive(false);
         }
     }
 
