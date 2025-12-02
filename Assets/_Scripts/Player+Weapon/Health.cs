@@ -12,7 +12,7 @@ public class Health : MonoBehaviour
 
     public event Action OnDeath;
     public event Action<int, int> OnHealthChanged;
-    public event Action OnHit; // New event for feedback
+    public event Action OnHit;
 
     private KnockbackFeedback knockbackFeedback;
 
@@ -24,7 +24,6 @@ public class Health : MonoBehaviour
 
     private void Start()
     {
-        // Broadcast initial health state
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
@@ -39,9 +38,6 @@ public class Health : MonoBehaviour
         return currentHealth;
     }
 
-    /// <summary>
-    /// Allows external UI scripts to request the current health state upon initialization.
-    /// </summary>
     public void RequestInitialHealth()
     {
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
@@ -55,9 +51,8 @@ public class Health : MonoBehaviour
         AudioManager.Instance.PlayModifiedSound(AudioManager.Instance.attack);
         if (currentHealth < 0) currentHealth = 0;
 
-        // Invoke events
         OnHealthChanged?.Invoke(currentHealth, maxHealth);
-        OnHit?.Invoke(); // Trigger the hit feedback
+        OnHit?.Invoke();
 
         if (knockbackFeedback != null)
         {
@@ -69,6 +64,24 @@ public class Health : MonoBehaviour
             AudioManager.Instance.PlayModifiedSound(AudioManager.Instance.gameover);
             Die();
         }
+    }
+
+    /// <summary>
+    /// Heals the character by a given amount, clamping at max health.
+    /// </summary>
+    /// <param name="amount">The amount of health to restore.</param>
+    public void Heal(int amount)
+    {
+        if (currentHealth <= 0) return; // Can't heal if dead
+
+        currentHealth += amount;
+        if (currentHealth > maxHealth)
+        {
+            currentHealth = maxHealth;
+        }
+
+        // Notify UI and other systems of the health change
+        OnHealthChanged?.Invoke(currentHealth, maxHealth);
     }
 
     private void Die()

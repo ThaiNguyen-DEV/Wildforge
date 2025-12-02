@@ -10,48 +10,71 @@ public class RoomContentSpawner : MonoBehaviour
 
     [Header("Camera")]
     [SerializeField]
-    private CinemachineCamera virtualCamera; // assign in inspector
+    private CinemachineCamera virtualCamera;
 
-    [Header("Prefabs")]
+    [Header("Core Prefabs")]
     [SerializeField]
     private GameObject playerPrefab;
     [SerializeField]
-    private GameObject meleeEnemyPrefab; // Renamed for clarity
-    [SerializeField]
-    private GameObject rangedEnemyPrefab; // Added ranged enemy
-    [SerializeField]
     private GameObject endLadderPrefab;
-    [SerializeField]
-    private GameObject torchPrefab;
 
-    [Header("Static room content")]
+    [Header("Enemy Prefabs")]
     [SerializeField]
-    private GameObject[] staticPrefabs;
+    private GameObject meleeEnemyPrefab;
     [SerializeField]
-    private int minStaticPerRoom = 0;
-    [SerializeField]
-    private int maxStaticPerRoom = 2;
-    [SerializeField]
-    private bool allowDuplicateStaticInRoom = true;
+    private GameObject rangedEnemyPrefab;
 
-    [Header("Enemies")]
+    [Header("Chest Spawning")]
+    [SerializeField]
+    private GameObject[] chestPrefabs;
+    [SerializeField, Range(0, 1)]
+    private float chestSpawnChance = 0.5f; // Chance for a chest to spawn in a room
+
+    [Header("Other Prop Spawning (Collidable)")]
+    [SerializeField]
+    private GameObject[] otherPropPrefabs;
+    [SerializeField]
+    private int minPropsPerRoom = 0;
+    [SerializeField]
+    private int maxPropsPerRoom = 2;
+    [SerializeField]
+    private bool allowDuplicatePropsInRoom = true;
+
+    [Header("Foliage Spawning (Non-Collidable)")]
+    [SerializeField]
+    private GameObject[] foliagePrefabs;
+    [SerializeField]
+    private int minFoliagePerRoom = 1;
+    [SerializeField]
+    private int maxFoliagePerRoom = 3;
+
+    [Header("Pickup Spawning")]
+    [SerializeField]
+    private GameObject smallHealthPotionPrefab;
+    [SerializeField, Range(0, 1)]
+    private float smallHealthPotionSpawnChance = 0.1f;
+    [SerializeField]
+    private GameObject bigHealthPotionPrefab;
+    [SerializeField, Range(0, 1)]
+    private float bigHealthPotionSpawnChance = 0.05f;
+
+    [Header("Enemy Spawning")]
     [SerializeField]
     private int minEnemiesPerRoom = 1;
     [SerializeField]
     private int maxEnemiesPerRoom = 1;
     [SerializeField, Range(0, 1)]
-    private float rangedEnemySpawnChance = 0.25f; // Chance to spawn a ranged enemy
+    private float rangedEnemySpawnChance = 0.25f;
 
-    [Header("Torches")]
+    [Header("Torch Spawning")]
+    [SerializeField]
+    private GameObject torchPrefab;
     [SerializeField, Range(0, 1)]
     private float torchSpawnChance = 0.1f;
 
-    [Header("Placement")]
+    [Header("Common Settings")]
     [SerializeField]
     private Vector2 worldOffset = new Vector2(0.5f, 0.5f);
-    [SerializeField]
-    private bool useRoomTilesForPlacement = true;
-
     [SerializeField]
     private Transform contentParent;
     [SerializeField]
@@ -70,7 +93,6 @@ public class RoomContentSpawner : MonoBehaviour
     {
         if (dungeonGenerator != null)
         {
-            dungeonGenerator.OnRoomCentersFinalized -= HandleCenters;
             dungeonGenerator.OnRoomFloorsFinalized -= HandleRoomsWithFloors;
             dungeonGenerator.OnTorchPositionsFinalized -= HandleTorches;
             subscribed = false;
@@ -85,7 +107,6 @@ public class RoomContentSpawner : MonoBehaviour
             Debug.LogWarning("[RoomContentSpawner] DungeonGenerator reference not set.");
             return;
         }
-        dungeonGenerator.OnRoomCentersFinalized += HandleCenters;
         dungeonGenerator.OnRoomFloorsFinalized += HandleRoomsWithFloors;
         dungeonGenerator.OnTorchPositionsFinalized += HandleTorches;
         subscribed = true;
@@ -94,26 +115,18 @@ public class RoomContentSpawner : MonoBehaviour
     private void HandleTorches(IReadOnlyList<Vector2Int> torchPositions)
     {
         if (torchPrefab == null) return;
-
         foreach (var position in torchPositions)
         {
             if (Random.value < torchSpawnChance)
             {
-                Vector3 worldPos = new Vector3(position.x + worldOffset.x, position.y + worldOffset.y, 0f);
-                InstantiateAt(torchPrefab, worldPos, Quaternion.identity);
+                InstantiateAt(torchPrefab, position, Quaternion.identity);
             }
         }
     }
 
-    private void HandleCenters(IReadOnlyList<Vector2Int> centers) { }
-
     private void HandleRoomsWithFloors(IReadOnlyList<RoomFirstDungeonGenerator.RoomFloorData> rooms)
     {
-        if (rooms == null || rooms.Count == 0)
-        {
-            Debug.LogWarning("[RoomContentSpawner] No room floor data available.");
-            return;
-        }
+        if (rooms == null || rooms.Count == 0) return;
 
         lastRooms = new List<RoomFirstDungeonGenerator.RoomFloorData>(rooms);
 
@@ -131,73 +144,148 @@ public class RoomContentSpawner : MonoBehaviour
         Vector2Int endCenter = dungeonGenerator.FindFarthestPointTo(playerRoom.Center, GetCenters(lastRooms));
         var endRoom = lastRooms.Find(r => r.Center == endCenter);
 
-        List<RoomFirstDungeonGenerator.RoomFloorData> otherRooms = new List<RoomFirstDungeonGenerator.RoomFloorData>();
+        List<RoomFirstDungeonGenerator.RoomFloorData> enemyRooms = new List<RoomFirstDungeonGenerator.RoomFloorData>();
         foreach (var r in lastRooms)
         {
             if (r.Center == playerRoom.Center || r.Center == endRoom.Center) continue;
-            otherRooms.Add(r);
+            enemyRooms.Add(r);
         }
 
         SpawnPlayerAtRoom(playerRoom);
         SpawnEndLadderAtRoom(endRoom);
 
-        foreach (var r in lastRooms)
-        {
-            SpawnStaticInRoomTiles(r);
-        }
-
-        SpawnEnemiesInRoomTiles(otherRooms);
+        // Spawn all content types
+        SpawnChests(lastRooms);
+        SpawnOtherProps(lastRooms);
+        SpawnFoliage(lastRooms);
+        SpawnPickups(lastRooms);
+        SpawnEnemies(enemyRooms);
     }
 
-    private IReadOnlyList<Vector2Int> GetCenters(List<RoomFirstDungeonGenerator.RoomFloorData> rooms)
+    private void SpawnChests(List<RoomFirstDungeonGenerator.RoomFloorData> rooms)
     {
-        List<Vector2Int> centers = new List<Vector2Int>(rooms.Count);
-        foreach (var r in rooms) centers.Add(r.Center);
-        return centers;
+        if (chestPrefabs == null || chestPrefabs.Length == 0) return;
+
+        foreach (var room in rooms)
+        {
+            if (Random.value < chestSpawnChance)
+            {
+                GameObject prefab = chestPrefabs[Random.Range(0, chestPrefabs.Length)];
+                if (prefab != null)
+                {
+                    SpawnObjectAtRandomTile(prefab, room);
+                }
+            }
+        }
+    }
+
+    private void SpawnOtherProps(List<RoomFirstDungeonGenerator.RoomFloorData> rooms)
+    {
+        if (otherPropPrefabs == null || otherPropPrefabs.Length == 0) return;
+
+        foreach (var room in rooms)
+        {
+            int count = Random.Range(minPropsPerRoom, maxPropsPerRoom + 1);
+            for (int i = 0; i < count; i++)
+            {
+                GameObject prefab = allowDuplicatePropsInRoom
+                    ? otherPropPrefabs[Random.Range(0, otherPropPrefabs.Length)]
+                    : otherPropPrefabs[Mathf.Clamp(i, 0, otherPropPrefabs.Length - 1)];
+
+                if (prefab != null)
+                {
+                    SpawnObjectAtRandomTile(prefab, room);
+                }
+            }
+        }
+    }
+
+    private void SpawnFoliage(List<RoomFirstDungeonGenerator.RoomFloorData> rooms)
+    {
+        if (foliagePrefabs == null || foliagePrefabs.Length == 0) return;
+
+        foreach (var room in rooms)
+        {
+            int count = Random.Range(minFoliagePerRoom, maxFoliagePerRoom + 1);
+            for (int i = 0; i < count; i++)
+            {
+                GameObject prefab = foliagePrefabs[Random.Range(0, foliagePrefabs.Length)];
+                if (prefab != null)
+                {
+                    SpawnObjectAtRandomTile(prefab, room);
+                }
+            }
+        }
+    }
+
+    private void SpawnPickups(List<RoomFirstDungeonGenerator.RoomFloorData> rooms)
+    {
+        foreach (var room in rooms)
+        {
+            // Chance to spawn a small potion
+            if (smallHealthPotionPrefab != null && Random.value < smallHealthPotionSpawnChance)
+            {
+                SpawnObjectAtRandomTile(smallHealthPotionPrefab, room);
+            }
+
+            // Chance to spawn a big potion
+            if (bigHealthPotionPrefab != null && Random.value < bigHealthPotionSpawnChance)
+            {
+                SpawnObjectAtRandomTile(bigHealthPotionPrefab, room);
+            }
+        }
+    }
+
+    private void SpawnEnemies(List<RoomFirstDungeonGenerator.RoomFloorData> rooms)
+    {
+        foreach (var room in rooms)
+        {
+            int count = Random.Range(minEnemiesPerRoom, maxEnemiesPerRoom + 1);
+            for (int i = 0; i < count; i++)
+            {
+                GameObject enemyPrefabToSpawn = meleeEnemyPrefab;
+                if (rangedEnemyPrefab != null && Random.value < rangedEnemySpawnChance)
+                {
+                    enemyPrefabToSpawn = rangedEnemyPrefab;
+                }
+
+                if (enemyPrefabToSpawn != null)
+                {
+                    var enemyInstance = SpawnObjectAtRandomTile(enemyPrefabToSpawn, room);
+                    if (enemyInstance != null && enemyInstance.TryGetComponent<EnemyAI>(out var ai))
+                    {
+                        ai.SetPlayer(playerTransform);
+                    }
+                }
+            }
+        }
     }
 
     private void SpawnPlayerAtRoom(RoomFirstDungeonGenerator.RoomFloorData room)
     {
         if (playerPrefab == null) return;
-
-        Vector3 pos = RoomTileOrCenter(room);
-        var instance = InstantiateAt(playerPrefab, pos, Quaternion.identity);
+        var instance = SpawnObjectAtRandomTile(playerPrefab, room);
         playerTransform = instance.transform;
 
         if (GameManager.Instance != null)
         {
             GameManager.Instance.RegisterPlayer(instance.GetComponent<Health>());
         }
-
         EnsureCameraFollowsPlayer();
-    }
-
-    private void EnsureCameraFollowsPlayer()
-    {
-        if (playerTransform == null) return;
-
-        if (virtualCamera == null)
-        {
-            virtualCamera = FindObjectOfType<CinemachineCamera>();
-        }
-
-        if (virtualCamera != null)
-        {
-            virtualCamera.Follow = playerTransform;
-            virtualCamera.LookAt = playerTransform;
-        }
-        else
-        {
-            Debug.LogWarning("[RoomContentSpawner] CinemachineVirtualCamera not found/assigned.");
-        }
     }
 
     private void SpawnEndLadderAtRoom(RoomFirstDungeonGenerator.RoomFloorData room)
     {
         if (endLadderPrefab == null) return;
-
         Vector3 pos = GetTrueRoomCenterPosition(room);
         InstantiateAt(endLadderPrefab, pos, Quaternion.identity);
+    }
+
+    private GameObject SpawnObjectAtRandomTile(GameObject prefab, RoomFirstDungeonGenerator.RoomFloorData room)
+    {
+        if (room.FloorTiles == null || room.FloorTiles.Count == 0) return null;
+        Vector2Int tile = room.FloorTiles[Random.Range(0, room.FloorTiles.Count)];
+        return InstantiateAt(prefab, tile, Quaternion.identity);
     }
 
     private Vector3 GetTrueRoomCenterPosition(RoomFirstDungeonGenerator.RoomFloorData room)
@@ -207,7 +295,6 @@ public class RoomContentSpawner : MonoBehaviour
             Vector2 sum = Vector2.zero;
             foreach (var t in room.FloorTiles) sum += t;
             Vector2 avg = sum / room.FloorTiles.Count;
-
             Vector2Int closest = room.FloorTiles[0];
             float bestDist = float.MaxValue;
             foreach (var t in room.FloorTiles)
@@ -221,86 +308,20 @@ public class RoomContentSpawner : MonoBehaviour
             }
             return new Vector3(closest.x + worldOffset.x, closest.y + worldOffset.y, 0f);
         }
-
         return new Vector3(room.Center.x + worldOffset.x, room.Center.y + worldOffset.y, 0f);
     }
 
-    private void SpawnStaticInRoomTiles(RoomFirstDungeonGenerator.RoomFloorData room)
+    private IReadOnlyList<Vector2Int> GetCenters(List<RoomFirstDungeonGenerator.RoomFloorData> rooms)
     {
-        if (staticPrefabs == null || staticPrefabs.Length == 0) return;
-
-        int minCount = Mathf.Max(0, minStaticPerRoom);
-        int maxCount = Mathf.Max(minCount, maxStaticPerRoom);
-        int count = Random.Range(minCount, maxCount + 1);
-
-        List<Vector2Int> tiles = room.FloorTiles;
-        if (tiles == null || tiles.Count == 0) return;
-
-        for (int i = 0; i < count; i++)
-        {
-            GameObject prefab = allowDuplicateStaticInRoom
-                ? staticPrefabs[Random.Range(0, staticPrefabs.Length)]
-                : staticPrefabs[Mathf.Clamp(i, 0, staticPrefabs.Length - 1)];
-
-            if (prefab == null) continue;
-
-            Vector2Int tile = tiles[Random.Range(0, tiles.Count)];
-            Vector3 worldPos = new Vector3(tile.x + worldOffset.x, tile.y + worldOffset.y, 0f);
-            InstantiateAt(prefab, worldPos, Quaternion.identity);
-        }
+        List<Vector2Int> centers = new List<Vector2Int>(rooms.Count);
+        foreach (var r in rooms) centers.Add(r.Center);
+        return centers;
     }
 
-    private void SpawnEnemiesInRoomTiles(List<RoomFirstDungeonGenerator.RoomFloorData> rooms)
+    private GameObject InstantiateAt(GameObject prefab, Vector2Int gridPos, Quaternion rotation)
     {
-        foreach (var room in rooms)
-        {
-            int minCount = Mathf.Max(0, minEnemiesPerRoom);
-            int maxCount = Mathf.Max(minCount, maxEnemiesPerRoom);
-            int count = Random.Range(minCount, maxCount + 1);
-
-            var tiles = room.FloorTiles;
-            if (tiles == null || tiles.Count == 0) continue;
-
-            for (int i = 0; i < count; i++)
-            {
-                // Decide which enemy type to spawn
-                GameObject enemyPrefabToSpawn = meleeEnemyPrefab;
-                if (rangedEnemyPrefab != null && Random.value < rangedEnemySpawnChance)
-                {
-                    enemyPrefabToSpawn = rangedEnemyPrefab;
-                }
-
-                if (enemyPrefabToSpawn == null) continue;
-
-                Vector2Int tile = tiles[Random.Range(0, tiles.Count)];
-                Vector3 worldPos = new Vector3(tile.x + worldOffset.x, tile.y + worldOffset.y, 0f);
-                var enemy = InstantiateAt(enemyPrefabToSpawn, worldPos, Quaternion.identity);
-
-                var ai = enemy.GetComponent<EnemyAI>();
-                if (ai != null)
-                {
-                    if (playerTransform == null)
-                    {
-                        var found = GameObject.FindWithTag("Player");
-                        playerTransform = found != null ? found.transform : null;
-                    }
-                    if (playerTransform != null)
-                    {
-                        ai.SetPlayer(playerTransform);
-                    }
-                }
-            }
-        }
-    }
-
-    private Vector3 RoomTileOrCenter(RoomFirstDungeonGenerator.RoomFloorData room)
-    {
-        if (useRoomTilesForPlacement && room.FloorTiles != null && room.FloorTiles.Count > 0)
-        {
-            Vector2Int tile = room.FloorTiles[Random.Range(0, room.FloorTiles.Count)];
-            return new Vector3(tile.x + worldOffset.x, tile.y + worldOffset.y, 0f);
-        }
-        return new Vector3(room.Center.x + worldOffset.x, room.Center.y + worldOffset.y, 0f);
+        Vector3 worldPos = new Vector3(gridPos.x + worldOffset.x, gridPos.y + worldOffset.y, 0f);
+        return InstantiateAt(prefab, worldPos, rotation);
     }
 
     private GameObject InstantiateAt(GameObject prefab, Vector3 worldPos, Quaternion rotation)
@@ -309,5 +330,16 @@ public class RoomContentSpawner : MonoBehaviour
         var instance = Instantiate(prefab, worldPos, rotation, parent);
         instance.name = $"{prefab.name}_{Mathf.RoundToInt(worldPos.x)}_{Mathf.RoundToInt(worldPos.y)}";
         return instance;
+    }
+
+    private void EnsureCameraFollowsPlayer()
+    {
+        if (playerTransform == null) return;
+        if (virtualCamera == null) virtualCamera = FindObjectOfType<CinemachineCamera>();
+        if (virtualCamera != null)
+        {
+            virtualCamera.Follow = playerTransform;
+            virtualCamera.LookAt = playerTransform;
+        }
     }
 }

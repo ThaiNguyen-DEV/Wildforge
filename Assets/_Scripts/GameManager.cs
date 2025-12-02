@@ -8,8 +8,11 @@ public class GameManager : MonoBehaviour
     [Header("Component References")]
     [SerializeField]
     private RoomFirstDungeonGenerator dungeonGenerator;
-    [SerializeField]
-    private GameObject deadCanvas; // Assign your DeadCanvas in the Inspector
+    private GameObject deadCanvas; // No longer serialized, will be assigned by the finder script
+
+    [Header("Game Settings")]
+    [SerializeField, Range(0, 1)]
+    private float deathPenaltyPercent = 0.6f;
 
     private int stage = 1;
     private Health playerHealth;
@@ -39,20 +42,29 @@ public class GameManager : MonoBehaviour
 
     private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
     {
-        // This method runs every time a scene is loaded.
-        // We check if the new scene is our game scene.
-        if (scene.name == "gameScene") // Use the exact name of your game scene
+        if (scene.name == "gameScene")
         {
-            // Find the new instances of components in the loaded scene
             dungeonGenerator = FindObjectOfType<RoomFirstDungeonGenerator>();
-            deadCanvas = GameObject.FindWithTag("DeadCanvas"); // Switched to FindWithTag for safety
-
-            // Reset player health reference for the new player that will be spawned
+            // The DeadCanvas will now be found by its own script.
             playerHealth = null;
 
-            // Start the stage
+            if (ScoreManager.Instance != null)
+            {
+                ScoreManager.Instance.MarkScoreAtRunStart();
+            }
+
             StartNewStage();
         }
+    }
+
+    /// <summary>
+    /// Allows the DeadCanvas to register itself with the GameManager.
+    /// </summary>
+    public void RegisterDeadCanvas(GameObject canvas)
+    {
+        deadCanvas = canvas;
+        // Ensure it's inactive when registered
+        deadCanvas.SetActive(false);
     }
 
     public void RegisterPlayer(Health health)
@@ -63,6 +75,11 @@ public class GameManager : MonoBehaviour
 
     private void HandlePlayerDeath()
     {
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.ApplyDeathPenalty(deathPenaltyPercent);
+        }
+
         if (deadCanvas != null)
         {
             deadCanvas.SetActive(true);
@@ -86,7 +103,6 @@ public class GameManager : MonoBehaviour
 
     private void StartNewStage()
     {
-        // Hide the death canvas if it's active
         if (deadCanvas != null)
         {
             deadCanvas.SetActive(false);
