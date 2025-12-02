@@ -17,15 +17,27 @@ public class ShopManager : MonoBehaviour
 
     private void Start()
     {
-        // Ensure default skin is always unlocked
-        PlayerPrefs.SetInt(UnlockedSkinKeyPrefix + skins[0].skinName, 1);
+        // Ensure default skin is always unlocked (index 0)
+        PlayerPrefs.SetInt(UnlockedSkinKeyPrefix + 0, 1);
         UpdateUI();
     }
 
     private void OnEnable()
     {
         // Update UI every time the shop panel is opened
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.OnScoreChanged += UpdateScoreText;
+        }
         UpdateUI();
+    }
+
+    private void OnDisable()
+    {
+        if (ScoreManager.Instance != null)
+        {
+            ScoreManager.Instance.OnScoreChanged -= UpdateScoreText;
+        }
     }
 
     public void BuySkin(int skinIndex)
@@ -35,8 +47,8 @@ public class ShopManager : MonoBehaviour
         SkinData skin = skins[skinIndex];
         if (ScoreManager.Instance.TrySpendScore(skin.price))
         {
-            // Unlock and save
-            PlayerPrefs.SetInt(UnlockedSkinKeyPrefix + skin.skinName, 1);
+            // Unlock and save using the index
+            PlayerPrefs.SetInt(UnlockedSkinKeyPrefix + skinIndex, 1);
             PlayerPrefs.Save();
             Debug.Log($"Purchased {skin.skinName}!");
             UpdateUI();
@@ -51,15 +63,15 @@ public class ShopManager : MonoBehaviour
     {
         if (skinIndex < 0 || skinIndex >= skins.Length) return;
 
-        // Check if skin is unlocked
-        if (PlayerPrefs.GetInt(UnlockedSkinKeyPrefix + skins[skinIndex].skinName, 0) == 1)
+        // Check if skin is unlocked using the index
+        if (PlayerPrefs.GetInt(UnlockedSkinKeyPrefix + skinIndex, 0) == 1)
         {
             int currentlyEquipped = PlayerPrefs.GetInt(EquippedSkinKey, 0);
 
             // If trying to equip the already equipped skin, unequip it (revert to default)
             if (currentlyEquipped == skinIndex)
             {
-                PlayerPrefs.SetInt(EquippedSkinKey, 0); // Revert to default skin
+                PlayerPrefs.SetInt(EquippedSkinKey, 0); // Revert to default skin (index 0)
             }
             else
             {
@@ -70,9 +82,17 @@ public class ShopManager : MonoBehaviour
         }
     }
 
+    private void UpdateScoreText(int newScore)
+    {
+        if (scoreText != null)
+        {
+            scoreText.text = newScore.ToString();
+        }
+    }
+
     private void UpdateUI()
     {
-        // Update score text
+        // Update score text immediately
         if (scoreText != null && ScoreManager.Instance != null)
         {
             scoreText.text = ScoreManager.Instance.Score.ToString();
@@ -82,7 +102,8 @@ public class ShopManager : MonoBehaviour
 
         for (int i = 0; i < skins.Length; i++)
         {
-            bool isUnlocked = PlayerPrefs.GetInt(UnlockedSkinKeyPrefix + skins[i].skinName, 0) == 1;
+            // Check unlock status using the index
+            bool isUnlocked = PlayerPrefs.GetInt(UnlockedSkinKeyPrefix + i, 0) == 1;
 
             // Update Buy Button state
             if (i < buyButtons.Length && buyButtons[i] != null)
