@@ -52,6 +52,7 @@ public class Health : MonoBehaviour
         if (currentHealth <= 0) return;
 
         currentHealth -= damage;
+        AudioManager.Instance.PlayModifiedSound(AudioManager.Instance.attack);
         if (currentHealth < 0) currentHealth = 0;
 
         // Invoke events
@@ -65,12 +66,14 @@ public class Health : MonoBehaviour
 
         if (currentHealth <= 0)
         {
+            AudioManager.Instance.PlayModifiedSound(AudioManager.Instance.gameover);
             Die();
         }
     }
 
     private void Die()
     {
+        //AudioManager.Instance.PlayModifiedSound(AudioManager.Instance.gameover);
         OnDeath?.Invoke();
         if (ScoreManager.Instance != null)
         {
